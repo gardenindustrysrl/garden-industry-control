@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Garden Industry Control</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body data-theme="dark">
+
+  <!-- Animated background -->
+  <div class="bg" aria-hidden="true">
+    <div class="bg__blob bg__blob--1"></div>
+    <div class="bg__blob bg__blob--2"></div>
+    <div class="bg__blob bg__blob--3"></div>
+    <div class="bg__overlay"></div>
+  </div>
+
+  <div class="container">
+
+    <!-- LOGIN -->
+    <section id="loginCard" class="login-wrap">
+      <div class="login-title">
+        <div class="login-sub">Добро пожаловать в</div>
+        <div class="login-main">Garden Industry Team</div>
+      </div>
+
+      <div class="card login-card">
+        <h1 style="margin:0 0 10px 0;">Вход в портал</h1>
+
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="admin@garden.md" autocomplete="username" />
+
+        <label for="password">Пароль</label>
+        <input id="password" type="password" placeholder="••••••" autocomplete="current-password" />
+
+        <div class="row" style="margin-top:12px;">
+          <button id="btnLogin" type="button" class="btn primary">Войти</button>
+          <button id="btnRegister" type="button" class="btn secondary">Регистрация</button>
+        </div>
+
+        <p id="loginMsg" class="msg"></p>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section id="appCard" class="app hidden">
+      <!-- TOPBAR -->
+      <header class="topbar">
+        <div class="topbar__left">
+          <button class="iconbtn" id="btnSidebar" type="button" aria-label="Меню">☰</button>
+          <div class="brand">
+            <div class="brand__logo">GI</div>
+            <div class="brand__text">
+              <div class="brand__name">Garden Industry</div>
+              <div class="brand__sub">Control Portal</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar__center">
+          <div class="search">
+            <input id="globalSearch" type="search" placeholder="Поиск по порталу..." />
+          </div>
+        </div>
+
+        <div class="topbar__right">
+          <button class="iconbtn" type="button" title="Уведомления">🔔</button>
+          <button class="iconbtn" type="button" title="GI AI">🤖</button>
+          <button class="iconbtn" type="button" title="Чат">💬</button>
+
+          <button id="btnProfile" class="avatar" type="button" title="Профиль">
+            <span class="avatar__dot"></span>
+            <span id="avatarName">Профиль</span>
+          </button>
+
+          <button id="btnLogout" class="btn secondary" type="button">Выйти</button>
+        </div>
+      </header>
+
+      <!-- SHELL -->
+      <div class="shell">
+        <!-- SIDEBAR -->
+        <aside id="sidebar" class="sidebar">
+          <nav id="mainNav" class="nav">
+            <button class="nav__item active" type="button" data-view="tasks">
+              <span class="nav__left">
+                <span class="nav__icon">✅</span>
+                <span class="nav__text">Задачи</span>
+              </span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="drive">
+              <span class="nav__left"><span class="nav__icon">💾</span><span class="nav__text">Диск</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="board">
+              <span class="nav__left"><span class="nav__icon">🧩</span><span class="nav__text">Доска</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="mail">
+              <span class="nav__left"><span class="nav__icon">✉️</span><span class="nav__text">Почта</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="crm">
+              <span class="nav__left"><span class="nav__icon">📇</span><span class="nav__text">CRM</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="marketing">
+              <span class="nav__left"><span class="nav__icon">📣</span><span class="nav__text">Маркетинг</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="warehouse">
+              <span class="nav__left"><span class="nav__icon">🏷️</span><span class="nav__text">Складской учёт</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="sites">
+              <span class="nav__left"><span class="nav__icon">🛒</span><span class="nav__text">Сайты и магазины</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="sign">
+              <span class="nav__left"><span class="nav__icon">✍️</span><span class="nav__text">Подпись</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="employees">
+              <span class="nav__left"><span class="nav__icon">👥</span><span class="nav__text">Сотрудники</span></span>
+            </button>
+
+            <button class="nav__item" type="button" data-view="automation">
+              <span class="nav__left"><span class="nav__icon">⚙️</span><span class="nav__text">Автоматизация</span></span>
+            </button>
+          </nav>
+        </aside>
+
+        <!-- MAIN VIEW -->
+        <main class="main">
+          <div class="page" id="viewRoot"></div>
+        </main>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

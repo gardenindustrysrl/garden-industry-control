@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Приглашение — Garden Industry Control</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+  <main class="auth">
+    <h1>Регистрация по приглашению</h1>
+    <div id="status" style="margin: 12px 0;"></div>
+
+    <form id="form" style="display:none; max-width:420px;">
+      <input type="hidden" id="token"/>
+
+      <label>Email</label>
+      <input id="email" type="email" placeholder="email" />
+
+      <label>ФИО</label>
+      <input id="full_name" type="text" placeholder="Иван Иванов" />
+
+      <label>Пароль</label>
+      <input id="password" type="password" placeholder="Пароль" required />
+
+      <button type="submit" style="margin-top:10px;">Создать аккаунт</button>
+    </form>
+  </main>
+
+  <script src="/invite.js"></script>
+</body>
+</html>
