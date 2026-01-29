@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# env
+.env
+
+# database / sqlite
+server/data/*.db
+server/data/*.sqlite
+server/data/*.sqlite3
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
