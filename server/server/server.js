@@ -1,27 +1,82 @@
 require("dotenv").config();
+console.log("🚀 SERVER FILE:", __filename);
+
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const cookieParser = require("cookie-parser");
 
-const { db, run, all } = require("./db");
+const { db, run, all, dbPath } = require("./db");
 const { authRequired, login, me, logout } = require("./auth");
 
-// ✅ инвайты (файлы лежат рядом с server.js в server/server/)
-const invitesRouter = require("./invites");
+// ✅ инвайты (backend роутеры, лежат рядом с server.js в server/server/)
+const invitesRouter = require("./invite");
 const registerInviteRouter = require("./registerInvite");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
-// Корень проекта: gic-portal (там index.html/app.js/style.css)
+// Корень проекта: gic-portal (там index.html/app.js/style.css/invite.html)
 const PROJECT_ROOT = path.join(__dirname, "..", "..");
 
 // schema.sql лежит: gic-portal/server/sql/schema.sql
 const schemaPath = path.join(__dirname, "..", "sql", "schema.sql");
-const schemaSql = fs.readFileSync(schemaPath, "utf8");
-db.exec(schemaSql);
+
+// ✅ Инициализация БД и схемы (с логами и проверками)
+function initDb() {
+  console.log("[DB] using:", dbPath);
+
+  let schemaSql = "";
+  try {
+    schemaSql = fs.readFileSync(schemaPath, "utf8");
+  } catch (e) {
+    console.error("❌ Cannot read schema.sql:", e.message);
+    console.error("   schemaPath:", schemaPath);
+    process.exit(1);
+  }
+
+  db.exec(schemaSql, (err) => {
+    if (err) {
+      console.error("❌ DB schema init error:", err.message);
+      console.error("   schemaPath:", schemaPath);
+      process.exit(1);
+      return;
+    }
+
+    // на всякий случай включим foreign keys
+    db.exec("PRAGMA foreign_keys = ON;");
+
+    // ✅ ПРОВЕРКА: структура invites должна быть с token_hash
+    db.all("PRAGMA table_info(invites);", (e2, cols) => {
+      if (e2) {
+        console.error("❌ Failed to read invites schema:", e2.message);
+        process.exit(1);
+        return;
+      }
+
+      const names = (cols || []).map((c) => c.name);
+      const hasTokenHash = names.includes("token_hash");
+      const hasExpiresAt = names.includes("expires_at");
+      const hasUsedAt = names.includes("used_at");
+
+      if (!hasTokenHash || !hasExpiresAt || !hasUsedAt) {
+        console.error("❌ INVITES TABLE WRONG STRUCTURE!");
+        console.error("   Expected columns: token_hash, expires_at, used_at");
+        console.error("   Actual columns:", names);
+        console.error("👉 Fix: leave ONLY ONE invites table in schema.sql (the one with token_hash)");
+        console.error("👉 Then delete server/data/app.db and restart.");
+        process.exit(1);
+        return;
+      }
+
+      console.log("✅ DB schema loaded");
+      console.log("✅ invites schema OK:", names);
+    });
+  });
+}
+
+initDb();
 
 // ✅ подключаем роуты инвайтов
 app.use(invitesRouter);
@@ -29,7 +84,9 @@ app.use(registerInviteRouter);
 
 // ✅ закрываем обычную регистрацию (только invite)
 app.post("/api/auth/register", (req, res) => {
-  return res.status(403).json({ error: "Registration is invite-only. Use /invite link." });
+  return res.status(403).json({
+    error: "Registration is invite-only. Use /invite link.",
+  });
 });
 
 app.post("/api/auth/login", (req, res) =>
@@ -42,7 +99,7 @@ app.post("/api/auth/login", (req, res) =>
 app.get("/api/auth/me", authRequired, (req, res) => me(req, res));
 app.post("/api/auth/logout", (req, res) => logout(req, res));
 
-// --- твой service-log ---
+// --- service-log ---
 app.post("/api/service-log", authRequired, async (req, res) => {
   try {
     const { object_name, task_type, notes, photo_base64, project_id } = req.body || {};
