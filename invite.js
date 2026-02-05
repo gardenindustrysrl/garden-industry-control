@@ -26,7 +26,8 @@
       return;
     }
 
-    status.textContent = `Ок ✅ Роль: ${data.role}. Действительно до: ${data.expires_at}`;
+    status.textContent =
+      `Ок ✅ Роль: ${data.role}. Действительно до: ${data.expires_at}`;
     form.style.display = "block";
 
     if (data.email && emailInput) {
@@ -57,8 +58,17 @@
         return;
       }
 
-      status.textContent = "Аккаунт создан ✅ Теперь зайди на главной странице через логин.";
+      // ✅ УСПЕХ
+      status.textContent =
+        "Аккаунт создан ✅ Через 3 секунды вы будете перенаправлены на страницу входа.";
+
       form.reset();
+      form.style.display = "none";
+
+      // ⏱ редирект через 3 секунды
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 3000);
     });
   } catch (err) {
     console.error(err);

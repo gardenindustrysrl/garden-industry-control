@@ -1,3 +1,4 @@
+// server/invite.js  (BACKEND)
 const crypto = require("crypto");
 const express = require("express");
 const { db, run, get, all } = require("./db");
@@ -14,6 +15,9 @@ function ownerRequired(req, res, next) {
   if (req.user.role !== "owner") return res.status(403).json({ error: "Forbidden" });
   next();
 }
+
+// разрешённые роли для invite
+const ALLOWED_ROLES = new Set(["worker", "manager"]);
 
 /**
  * ✅ GET /api/invites/:token
@@ -63,19 +67,26 @@ router.get("/api/invites/:token", async (req, res) => {
 
 /**
  * ✅ POST /api/invites (только owner)
- * body: { email?: string, role?: "worker"|"manager", days?: number }
+ * body: { email?: string|null, role?: "worker"|"manager", ttl_hours?: number }
+ *
+ * ВАЖНО: это соответствует твоему app.js (он шлёт ttl_hours и ждёт inviteLink)
  */
 router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
   try {
-    const email = (req.body?.email ? String(req.body.email).trim() : "") || null;
-    const role = (req.body?.role ? String(req.body.role).trim() : "worker") || "worker";
-    const days = Number(req.body?.days ?? 7);
+    const emailRaw = req.body?.email ? String(req.body.email).trim() : "";
+    const email = emailRaw ? emailRaw : null;
+
+    const roleRaw = req.body?.role ? String(req.body.role).trim() : "worker";
+    const role = ALLOWED_ROLES.has(roleRaw) ? roleRaw : "worker";
+
+    const ttl_hours = Number(req.body?.ttl_hours ?? 72);
+    const ttl = Number.isFinite(ttl_hours) && ttl_hours > 0 ? ttl_hours : 72;
 
     const token = crypto.randomUUID();
     const token_hash = hashToken(token);
 
     const d = new Date();
-    d.setDate(d.getDate() + (Number.isFinite(days) && days > 0 ? days : 7));
+    d.setHours(d.getHours() + ttl);
     const expires_at = d.toISOString();
 
     await run(
@@ -87,8 +98,10 @@ router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
 
     res.json({
       ok: true,
-      token, // показываем один раз
-      link: `/invite/${token}`,
+      // показываем один раз
+      token,
+      // то, что ждёт твой фронт:
+      inviteLink: `/invite/${token}`,
       role,
       expires_at,
     });
@@ -117,41 +130,7 @@ router.get("/api/invites-list", authRequired, ownerRequired, async (req, res) =>
   }
 });
 
-/**
- * ⚠️ DEV ONLY: создать инвайт без авторизации (для теста)
- * УДАЛИМ после того как сделаем UI директора
- */
-router.get("/api/dev/create-invite", async (req, res) => {
-  try {
-    const role = String(req.query.role || "worker");
-    const days = Number(req.query.days || 7);
-    const email = req.query.email ? String(req.query.email).trim() : null;
-
-    const token = crypto.randomUUID();
-    const token_hash = hashToken(token);
-
-    const d = new Date();
-    d.setDate(d.getDate() + (Number.isFinite(days) && days > 0 ? days : 7));
-    const expires_at = d.toISOString();
-
-    await run(
-      db,
-      `INSERT INTO invites (token_hash, email, role, created_by, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [token_hash, email, role, 1, expires_at]
-    );
-
-    res.json({
-      ok: true,
-      token,
-      link: `http://127.0.0.1:3000/invite/${token}`,
-      role,
-      expires_at,
-    });
-  } catch (e) {
-    console.error("❌ DEV INVITE ERROR:", e);
-    res.status(500).json({ ok: false, error: "dev create invite failed", details: String(e.message || e) });
-  }
-});
+// ❌ DEV ROUTE УДАЛЁН полностью:
+// router.get("/api/dev/create-invite", ...)
 
 module.exports = router;

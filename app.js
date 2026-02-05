@@ -1,86 +1,96 @@
+/* =====================================
+   Garden Industry Control — app.js
+   STABLE + INVITES + EMPLOYEES (owner)
+   + Profile popup (name + email)
+   + After login always refresh /api/auth/me (fix can_invite menu)
+===================================== */
+
 const $ = (id) => document.getElementById(id);
 
 const loginCard = $("loginCard");
-const appCard = $("appCard");
-const loginMsg = $("loginMsg");
+const appCard   = $("appCard");
+const loginMsg  = $("loginMsg");
 
 let CURRENT_USER = null;
 
-/* -----------------------
-   UI helpers
------------------------ */
+/* ================= API ================= */
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    },
+    ...options
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+/* ================= UI ================= */
 function showLogin(message = "") {
-  loginCard?.classList.remove("hidden");
-  appCard?.classList.add("hidden");
-  if (loginMsg) loginMsg.textContent = message;
+  loginCard.classList.remove("hidden");
+  appCard.classList.add("hidden");
+  loginMsg.textContent = message;
 }
 
 function showApp(user) {
   CURRENT_USER = user;
 
-  loginCard?.classList.add("hidden");
-  appCard?.classList.remove("hidden");
-  if (loginMsg) loginMsg.textContent = "";
-
-  initShell(user);
-}
-
-/* -----------------------
-   API
------------------------ */
-async function api(path, { method = "GET", body } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: "include",
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data?.error || `HTTP ${res.status}`;
-    throw new Error(msg);
+  // ✅ обновим подпись профиля в topbar
+  const avatarName = $("avatarName");
+  if (avatarName && CURRENT_USER) {
+    avatarName.textContent = (CURRENT_USER.full_name || CURRENT_USER.email || "Профиль");
   }
-  return data;
+
+  loginCard.classList.add("hidden");
+  appCard.classList.remove("hidden");
+  loginMsg.textContent = "";
+  initShell();
 }
 
-async function checkSession() {
-  try {
-    const data = await api("/api/auth/me");
-    const user = data.user || data;
-    showApp(user);
-  } catch {
-    showLogin("");
-  }
+function isInviteAllowed() {
+  return !!CURRENT_USER && (CURRENT_USER.role === "owner" || !!CURRENT_USER.can_invite);
 }
 
-/* -----------------------
-   AUTH actions
------------------------ */
-function doRegister() {
-  if (loginMsg) {
-    loginMsg.textContent =
-      "Регистрация закрыта. Сотрудник может зарегистрироваться только по ссылке-приглашению (/invite/...).";
-  }
+function isOwner() {
+  return !!CURRENT_USER && CURRENT_USER.role === "owner";
 }
 
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+/* ================= AUTH ================= */
 async function doLogin() {
-  if (loginMsg) loginMsg.textContent = "";
+  loginMsg.textContent = "";
 
-  const email = $("email")?.value.trim();
-  const password = $("password")?.value;
+  const email = $("email").value.trim();
+  const password = $("password").value;
 
   if (!email || !password) {
-    if (loginMsg) loginMsg.textContent = "Введите email и пароль";
+    loginMsg.textContent = "Введите email и пароль";
     return;
   }
 
   try {
-    const data = await api("/api/auth/login", { method: "POST", body: { email, password } });
-    const user = data.user || data;
-    showApp(user);
+    // 1) логинимся (ставит cookie)
+    await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+
+    // 2) ✅ берём актуальные поля role/can_invite/full_name
+    const meData = await api("/api/auth/me");
+    showApp(meData.user || meData);
   } catch (e) {
-    if (loginMsg) loginMsg.textContent = `❌ ${e.message}`;
+    loginMsg.textContent = "❌ " + e.message;
   }
 }
 
@@ -89,28 +99,26 @@ async function doLogout() {
     await api("/api/auth/logout", { method: "POST" });
   } catch {}
   CURRENT_USER = null;
-  showLogin("Вы вышли из системы.");
+  showLogin("Вы вышли из системы");
 }
 
-/* -----------------------
-   SHELL
------------------------ */
-function initShell(user) {
-  // имя справа
-  const avatarName = $("avatarName");
-  if (avatarName) avatarName.textContent = user?.full_name || user?.email || "Профиль";
+/* ================= SESSION ================= */
+async function checkSession() {
+  try {
+    const data = await api("/api/auth/me");
+    showApp(data.user || data);
+  } catch {
+    showLogin("");
+  }
+}
 
-  // burger
+/* ================= SHELL ================= */
+function initShell() {
+  // ☰ sidebar collapse
   const btnSidebar = $("btnSidebar");
-  const sidebar = $("sidebar");
-
   if (btnSidebar) {
     btnSidebar.onclick = () => {
       document.body.classList.toggle("sidebar-collapsed");
-
-      if (window.matchMedia("(max-width: 980px)").matches && sidebar) {
-        sidebar.classList.toggle("is-open");
-      }
     };
   }
 
@@ -118,57 +126,67 @@ function initShell(user) {
   const btnLogout = $("btnLogout");
   if (btnLogout) btnLogout.onclick = doLogout;
 
-  // profile
+  // ✅ profile: show name + email
   const btnProfile = $("btnProfile");
-  if (btnProfile) btnProfile.onclick = () => renderView("profile");
-
-  // nav
-  const nav = $("mainNav");
-  if (nav) {
-    nav.onclick = (e) => {
-      const item = e.target.closest(".nav__item");
-      if (!item) return;
-
-      nav.querySelectorAll(".nav__item").forEach((b) => b.classList.remove("active"));
-      item.classList.add("active");
-
-      renderView(item.dataset.view);
-
-      if (window.matchMedia("(max-width: 980px)").matches && sidebar) {
-        sidebar.classList.remove("is-open");
-      }
+  if (btnProfile) {
+    btnProfile.onclick = () => {
+      const name = (CURRENT_USER?.full_name || "").trim() || "Без имени";
+      const email = CURRENT_USER?.email || "";
+      alert(`${name}\n${email}`);
     };
   }
 
+  // nav clicks
+  const nav = $("mainNav");
+  if (nav) {
+    nav.onclick = (e) => {
+      const btn = e.target.closest(".nav__item");
+      if (!btn) return;
+
+      nav.querySelectorAll(".nav__item").forEach(b =>
+        b.classList.remove("active")
+      );
+      btn.classList.add("active");
+
+      renderView(btn.dataset.view);
+    };
+  }
+
+  // ✅ Подсветим/скроем пункты по ролям (не ломая верстку)
+  applyRoleUi();
+
+  // default view
   renderView("tasks");
 }
 
+function applyRoleUi() {
+  const nav = $("mainNav");
+  if (!nav) return;
+
+  // скрыть "Сотрудники" для не-owner
+  const employeesBtn = nav.querySelector('.nav__item[data-view="employees"]');
+  if (employeesBtn) {
+    employeesBtn.style.display = isOwner() ? "" : "none";
+  }
+
+  // скрыть "Приглашения" если нет права
+  const invitesBtn = nav.querySelector('.nav__item[data-view="invites"]');
+  if (invitesBtn) {
+    invitesBtn.style.display = isInviteAllowed() ? "" : "none";
+  }
+}
+
+/* ================= VIEWS ================= */
 function renderView(view) {
   const root = $("viewRoot");
   if (!root) return;
 
-  if (view === "tasks") {
-    root.innerHTML = renderTasksHtml(CURRENT_USER);
-    wireTasksHandlers();
-    loadLogs().catch(() => {});
-    return;
-  }
-
-  if (view === "profile") {
-    root.innerHTML = `
-      <div class="card">
-        <h2 style="margin:0 0 8px 0;">Профиль</h2>
-        <div class="muted">Пока заглушка. Дальше сделаем редактирование профиля.</div>
-        <hr/>
-        <div><b>Email:</b> ${escapeHtml(CURRENT_USER?.email || "")}</div>
-        <div><b>Роль:</b> ${escapeHtml(CURRENT_USER?.role || "")}</div>
-        <div><b>Имя:</b> ${escapeHtml(CURRENT_USER?.full_name || "")}</div>
-      </div>
-    `;
-    return;
-  }
+  // спец-экраны
+  if (view === "employees") return renderEmployeesView(root);
+  if (view === "invites") return renderInvitesView(root);
 
   const titles = {
+    tasks: "Задачи",
     drive: "Диск",
     board: "Доска",
     mail: "Почта",
@@ -179,197 +197,327 @@ function renderView(view) {
     sign: "Подпись",
     employees: "Сотрудники",
     automation: "Автоматизация",
+    invites: "Приглашения",
+    structure: "Структура",
   };
 
   root.innerHTML = `
     <div class="card">
-      <h2 style="margin:0 0 8px 0;">${titles[view] || "Раздел"}</h2>
-      <div class="muted">Здесь будет функционал раздела. Сейчас заглушка.</div>
+      <h2 style="margin-top:0;">${titles[view] || "Раздел"}</h2>
+      <p class="muted">
+        Раздел <b>${titles[view] || view}</b>.<br>
+        Контент будет добавлен позже.
+      </p>
     </div>
   `;
 }
 
-/* -----------------------
-   TASKS view
------------------------ */
-function renderTasksHtml(user) {
-  const isOwner = user?.role === "owner";
-
-  return `
-    <div class="grid" style="grid-template-columns: 1fr; gap: 12px;">
-      ${isOwner ? `
-        <div class="card">
-          <h2 style="margin:0 0 10px 0;">Создать приглашение</h2>
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <input id="invEmail" type="email" placeholder="Email сотрудника (необязательно)" style="min-width:260px;">
-            <select id="invRole" style="min-width:160px;">
-              <option value="worker">worker</option>
-              <option value="manager">manager</option>
-            </select>
-            <input id="invTtl" type="number" value="72" min="1" style="width:120px;" title="Срок (часов)">
-            <button id="btnCreateInvite" class="btn primary" type="button">Создать приглашение</button>
-          </div>
-          <div id="invOut" class="small" style="margin-top:10px;"></div>
-        </div>
-      ` : ""}
-
+/* ================= INVITES VIEW ================= */
+async function renderInvitesView(root) {
+  if (!isInviteAllowed()) {
+    root.innerHTML = `
       <div class="card">
-        <h2 style="margin:0 0 10px 0;">Добавить запись обслуживания</h2>
-
-        <div class="grid">
-          <input id="object_name" placeholder="Объект (например: Magdacesti)" />
-          <input id="task_type" placeholder="Тип работ (например: Газон / Полив / Уборка)" />
-          <input id="project_id" placeholder="Project ID (необязательно)" />
-          <textarea id="notes" placeholder="Заметки"></textarea>
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <button id="btnAddLog" class="btn primary" type="button">Сохранить</button>
-          <button id="btnReload" class="btn secondary" type="button">Обновить список</button>
-        </div>
-
-        <p id="appMsg" class="msg"></p>
-
-        <h2 style="margin-top:16px;">Последние 200 записей</h2>
-        <div id="logs" class="logs"></div>
+        <h2 style="margin-top:0;">Приглашения</h2>
+        <p class="muted">Нет доступа.</p>
       </div>
-    </div>
-  `;
-}
-
-function wireTasksHandlers() {
-  $("btnAddLog") && ($("btnAddLog").onclick = addLog);
-  $("btnReload") && ($("btnReload").onclick = () => loadLogs());
-  $("btnCreateInvite") && ($("btnCreateInvite").onclick = createInvite);
-}
-
-/* -----------------------
-   INVITES
------------------------ */
-async function createInvite() {
-  const out = $("invOut");
-  if (out) out.textContent = "Создаём...";
-
-  const email = $("invEmail")?.value.trim();
-  const role = $("invRole")?.value || "worker";
-  const ttl_hours = Number($("invTtl")?.value || 72);
-
-  try {
-    const data = await api("/api/invites", {
-      method: "POST",
-      body: { email: email || null, role, ttl_hours },
-    });
-
-    const link = data.inviteLink;
-
-    if (out) {
-      out.innerHTML = `
-        ✅ Ссылка создана (до ${escapeHtml(data.expires_at || "")})<br/>
-        <div style="margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <input id="inviteLinkField" value="${escapeHtml(link)}" style="min-width:420px;" readonly />
-          <button id="btnCopyInvite" class="btn" type="button">Скопировать</button>
-          <a class="btn" href="${escapeHtml(link)}" target="_blank" rel="noreferrer">Открыть</a>
-        </div>
-      `;
-    }
-
-    const btnCopy = $("btnCopyInvite");
-    if (btnCopy) {
-      btnCopy.onclick = async () => {
-        const field = $("inviteLinkField");
-        if (!field) return;
-        field.select();
-        field.setSelectionRange(0, 99999);
-        try {
-          await navigator.clipboard.writeText(field.value);
-          alert("Ссылка скопирована ✅");
-        } catch {
-          document.execCommand("copy");
-          alert("Ссылка скопирована ✅");
-        }
-      };
-    }
-  } catch (e) {
-    if (out) out.textContent = `❌ ${e.message}`;
-  }
-}
-
-/* -----------------------
-   SERVICE LOGS
------------------------ */
-async function addLog() {
-  const msg = $("appMsg");
-  if (msg) msg.textContent = "";
-
-  const object_name = $("object_name")?.value.trim();
-  const task_type = $("task_type")?.value.trim();
-  const project_id = $("project_id")?.value.trim();
-  const notes = $("notes")?.value.trim();
-
-  if (!object_name || !task_type) {
-    if (msg) msg.textContent = "❌ Заполни object_name и task_type";
+    `;
     return;
   }
 
-  try {
-    await api("/api/service-log", {
-      method: "POST",
-      body: {
-        object_name,
-        task_type,
-        project_id: project_id || null,
-        notes: notes || null,
-        photo_base64: null,
-      },
-    });
+  root.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0;">Приглашения</h2>
+      <p class="muted">Создай приглашение для сотрудника. Ссылка одноразовая.</p>
 
-    $("notes") && ($("notes").value = "");
-    if (msg) msg.textContent = "✅ Сохранено";
-    await loadLogs();
-  } catch (e) {
-    if (msg) msg.textContent = `❌ ${e.message}`;
-  }
-}
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; max-width:720px;">
+        <div>
+          <label class="muted">Email (необязательно)</label>
+          <input id="invEmail" type="email" placeholder="worker@garden.md" />
+        </div>
 
-async function loadLogs() {
-  const data = await api("/api/service-log");
-  renderLogs(data.rows || []);
-}
+        <div>
+          <label class="muted">Роль</label>
+          <select id="invRole">
+            <option value="worker">worker</option>
+            <option value="manager">manager</option>
+          </select>
+        </div>
 
-function renderLogs(rows) {
-  const root = $("logs");
-  if (!root) return;
+        <div>
+          <label class="muted">Срок действия (часов)</label>
+          <input id="invTtl" type="number" min="1" value="72" />
+        </div>
 
-  root.innerHTML = "";
-  for (const r of rows || []) {
-    const el = document.createElement("div");
-    el.className = "logitem";
-    el.innerHTML = `
-      <div class="loghead">
-        <div>#${r.id} — ${escapeHtml(r.object_name)} / ${escapeHtml(r.task_type)}</div>
-        <div class="small">${escapeHtml(r.created_at || "")}</div>
+        <div style="display:flex; align-items:flex-end; gap:10px;">
+          <button id="btnMakeInvite" class="btn primary" style="min-width:180px;">Создать приглашение</button>
+          <span id="invStatus" class="muted"></span>
+        </div>
       </div>
-      <div class="small">project_id: ${escapeHtml(String(r.project_id ?? ""))} | user_id: ${escapeHtml(String(r.user_id ?? ""))}</div>
-      <div>${escapeHtml(r.notes || "")}</div>
-    `;
-    root.appendChild(el);
+
+      <div id="invResult" class="hidden" style="margin-top:14px;">
+        <label class="muted">Ссылка приглашения (скопируй и отправь)</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input id="invLink" type="text" readonly />
+          <button id="btnCopyInvite" class="btn">Копировать</button>
+        </div>
+        <p class="muted" style="margin-top:8px;">
+          После использования ссылка станет недействительной.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <h3 style="margin:0;">Последние приглашения</h3>
+        <button id="btnRefreshInvites" class="btn">Обновить</button>
+      </div>
+      <div id="invTableWrap" style="margin-top:10px;">
+        <p class="muted">Загрузка...</p>
+      </div>
+      <p class="muted" style="margin-top:10px;">
+        Список видит только <b>owner</b>.
+      </p>
+    </div>
+  `;
+
+  const statusEl = $("invStatus");
+  const resultEl = $("invResult");
+  const linkEl = $("invLink");
+
+  $("btnMakeInvite").onclick = async () => {
+    statusEl.textContent = "";
+    resultEl.classList.add("hidden");
+
+    const email = $("invEmail").value.trim();
+    const role = $("invRole").value;
+    const ttl_hours = Number($("invTtl").value || 72);
+
+    try {
+      const data = await api("/api/invites", {
+        method: "POST",
+        body: JSON.stringify({
+          email: email || null,
+          role,
+          ttl_hours: Number.isFinite(ttl_hours) ? ttl_hours : 72
+        })
+      });
+
+      const fullLink = `${location.origin}${data.inviteLink || ""}`;
+      linkEl.value = fullLink;
+      resultEl.classList.remove("hidden");
+      statusEl.textContent = "✅ Готово";
+
+      if (isOwner()) await loadInvitesTable();
+    } catch (e) {
+      statusEl.textContent = "❌ " + e.message;
+    }
+  };
+
+  $("btnCopyInvite").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(linkEl.value);
+      statusEl.textContent = "✅ Скопировано";
+    } catch {
+      linkEl.select();
+      document.execCommand("copy");
+      statusEl.textContent = "✅ Скопировано";
+    }
+  };
+
+  $("btnRefreshInvites").onclick = async () => {
+    await loadInvitesTable();
+  };
+
+  async function loadInvitesTable() {
+    const wrap = $("invTableWrap");
+
+    if (!isOwner()) {
+      wrap.innerHTML = `<p class="muted">Только owner видит список приглашений.</p>`;
+      return;
+    }
+
+    wrap.innerHTML = `<p class="muted">Загрузка...</p>`;
+    try {
+      const data = await api("/api/invites-list");
+      const rows = data.rows || [];
+
+      if (!rows.length) {
+        wrap.innerHTML = `<p class="muted">Пока нет приглашений.</p>`;
+        return;
+      }
+
+      wrap.innerHTML = `
+        <div style="overflow:auto;">
+          <table class="table" style="min-width:840px;">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Роль</th>
+                <th>Создано</th>
+                <th>Истекает</th>
+                <th>Использовано</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td>${r.id}</td>
+                  <td>${escapeHtml(r.email || "")}</td>
+                  <td>${escapeHtml(r.role || "")}</td>
+                  <td>${escapeHtml(r.created_at || "")}</td>
+                  <td>${escapeHtml(r.expires_at || "")}</td>
+                  <td>${r.used_at ? ("✅ " + escapeHtml(r.used_at)) : "—"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (e) {
+      wrap.innerHTML = `<p class="muted">❌ ${escapeHtml(e.message)}</p>`;
+    }
   }
+
+  await loadInvitesTable();
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+/* ================= EMPLOYEES VIEW ================= */
+async function renderEmployeesView(root) {
+  if (!isOwner()) {
+    root.innerHTML = `
+      <div class="card">
+        <h2 style="margin-top:0;">Сотрудники</h2>
+        <p class="muted">Этот раздел доступен только владельцу (owner).</p>
+      </div>
+    `;
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <h2 style="margin:0;">Сотрудники</h2>
+        <button id="btnReloadUsers" class="btn">Обновить</button>
+      </div>
+
+      <p class="muted" style="margin-top:8px;">
+        Включай право <b>может приглашать</b> тем сотрудникам, кому разрешено выдавать инвайты.
+      </p>
+
+      <div id="usersTableWrap" style="margin-top:12px;">
+        <p class="muted">Загрузка...</p>
+      </div>
+    </div>
+  `;
+
+  $("btnReloadUsers").onclick = async () => {
+    await loadUsers();
+  };
+
+  async function loadUsers() {
+    const wrap = $("usersTableWrap");
+    wrap.innerHTML = `<p class="muted">Загрузка...</p>`;
+
+    try {
+      const data = await api("/api/users");
+      const rows = data.rows || [];
+
+      if (!rows.length) {
+        wrap.innerHTML = `<p class="muted">Нет пользователей.</p>`;
+        return;
+      }
+
+      wrap.innerHTML = `
+        <div style="overflow:auto;">
+          <table class="table" style="min-width:760px;">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Имя</th>
+                <th>Роль</th>
+                <th>Может приглашать</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(u => `
+                <tr>
+                  <td>${u.id}</td>
+                  <td>${escapeHtml(u.email || "")}</td>
+                  <td>${escapeHtml(u.full_name || "")}</td>
+                  <td>${escapeHtml(u.role || "")}</td>
+                  <td>
+                    ${u.role === "owner"
+                      ? "Всегда"
+                      : `<label style="display:inline-flex; align-items:center; gap:8px;">
+                          <input type="checkbox" data-user-id="${u.id}" ${u.can_invite ? "checked" : ""} />
+                          <span class="muted">Дать разрешение</span>
+                        </label>`
+                    }
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+          <button id="btnSaveInvPerms" class="btn primary">Сохранить изменения</button>
+          <span id="usersStatus" class="muted"></span>
+        </div>
+      `;
+
+      $("btnSaveInvPerms").onclick = async () => {
+        const status = $("usersStatus");
+        status.textContent = "";
+
+        const checkboxes = wrap.querySelectorAll('input[type="checkbox"][data-user-id]');
+        const updates = [];
+        checkboxes.forEach(cb => {
+          updates.push({ id: Number(cb.dataset.userId), can_invite: cb.checked });
+        });
+
+        try {
+          for (const u of updates) {
+            await api(`/api/users/${u.id}/can-invite`, {
+              method: "PATCH",
+              body: JSON.stringify({ can_invite: u.can_invite })
+            });
+          }
+          status.textContent = "✅ Сохранено";
+
+          // ✅ после изменения прав обновим CURRENT_USER (на случай если ты включал себе/другим)
+          await refreshMe();
+        } catch (e) {
+          status.textContent = "❌ " + e.message;
+        }
+      };
+    } catch (e) {
+      wrap.innerHTML = `<p class="muted">❌ ${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function refreshMe() {
+    try {
+      const data = await api("/api/auth/me");
+      CURRENT_USER = (data.user || data);
+      applyRoleUi();
+      const avatarName = $("avatarName");
+      if (avatarName && CURRENT_USER) {
+        avatarName.textContent = (CURRENT_USER.full_name || CURRENT_USER.email || "Профиль");
+      }
+    } catch {}
+  }
+
+  await loadUsers();
 }
 
-/* -----------------------
-   Bind login events
------------------------ */
-$("btnRegister")?.addEventListener("click", doRegister);
-$("btnLogin")?.addEventListener("click", doLogin);
+/* ================= EVENTS ================= */
+document.addEventListener("DOMContentLoaded", () => {
+  $("btnLogin").addEventListener("click", doLogin);
+  $("btnRegister").addEventListener("click", () => {
+    loginMsg.textContent = "Регистрация доступна только по приглашению";
+  });
 
-// auto-check session
-checkSession();
+  checkSession();
+});

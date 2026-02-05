@@ -9,9 +9,11 @@ const cookieParser = require("cookie-parser");
 const { db, run, all, dbPath } = require("./db");
 const { authRequired, login, me, logout } = require("./auth");
 
-// ✅ инвайты (backend роутеры, лежат рядом с server.js в server/server/)
+// ✅ роутеры
 const invitesRouter = require("./invite");
 const registerInviteRouter = require("./registerInvite");
+const usersRouter = require("./users"); // ✅ owner управляет can_invite
+const structureRouter = require("./structure"); // ✅ НОВОЕ: структура (отделы/должности/сотрудники)
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -25,7 +27,7 @@ const schemaPath = path.join(__dirname, "..", "sql", "schema.sql");
 
 // ✅ Инициализация БД и схемы (с логами и проверками)
 function initDb() {
-  console.log("[DB] using:", dbPath);
+  console.log("[DB] path:", dbPath);
 
   let schemaSql = "";
   try {
@@ -36,6 +38,9 @@ function initDb() {
     process.exit(1);
   }
 
+  // ✅ foreign keys включаем ДО выполнения схемы
+  db.exec("PRAGMA foreign_keys = ON;");
+
   db.exec(schemaSql, (err) => {
     if (err) {
       console.error("❌ DB schema init error:", err.message);
@@ -43,9 +48,6 @@ function initDb() {
       process.exit(1);
       return;
     }
-
-    // на всякий случай включим foreign keys
-    db.exec("PRAGMA foreign_keys = ON;");
 
     // ✅ ПРОВЕРКА: структура invites должна быть с token_hash
     db.all("PRAGMA table_info(invites);", (e2, cols) => {
@@ -64,7 +66,7 @@ function initDb() {
         console.error("❌ INVITES TABLE WRONG STRUCTURE!");
         console.error("   Expected columns: token_hash, expires_at, used_at");
         console.error("   Actual columns:", names);
-        console.error("👉 Fix: leave ONLY ONE invites table in schema.sql (the one with token_hash)");
+        console.error("👉 Fix: use ONLY ONE invites table in schema.sql (token_hash version).");
         console.error("👉 Then delete server/data/app.db and restart.");
         process.exit(1);
         return;
@@ -78,9 +80,11 @@ function initDb() {
 
 initDb();
 
-// ✅ подключаем роуты инвайтов
+// ✅ подключаем роуты
 app.use(invitesRouter);
 app.use(registerInviteRouter);
+app.use(usersRouter);
+app.use(structureRouter); // ✅ НОВОЕ
 
 // ✅ закрываем обычную регистрацию (только invite)
 app.post("/api/auth/register", (req, res) => {
@@ -89,6 +93,7 @@ app.post("/api/auth/register", (req, res) => {
   });
 });
 
+// auth
 app.post("/api/auth/login", (req, res) =>
   login(req, res).catch((err) => {
     console.error(err);
@@ -97,6 +102,7 @@ app.post("/api/auth/login", (req, res) =>
 );
 
 app.get("/api/auth/me", authRequired, (req, res) => me(req, res));
+app.get("/api/me", authRequired, (req, res) => me(req, res)); // ✅ алиас (удобно фронту)
 app.post("/api/auth/logout", (req, res) => logout(req, res));
 
 // --- service-log ---

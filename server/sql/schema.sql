@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   full_name TEXT,
   role TEXT NOT NULL DEFAULT 'worker', -- owner / manager / worker
+  can_invite INTEGER NOT NULL DEFAULT 0, -- право приглашать (0/1)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS service_logs (
 );
 
 -- =========================
--- INVITES (одноразовые, через token_hash)
+-- INVITES
 -- =========================
 CREATE TABLE IF NOT EXISTS invites (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,11 +59,63 @@ CREATE TABLE IF NOT EXISTS invites (
 
 CREATE INDEX IF NOT EXISTS idx_invites_token_hash ON invites(token_hash);
 CREATE INDEX IF NOT EXISTS idx_invites_expires_at ON invites(expires_at);
+
 -- =========================
--- SEED OWNER (dev)
--- создаём первого владельца, если users пустая
--- пароль потом поменяем через UI
+-- SEED ADMIN (dev)
+-- admin@garden.md / 123456
 -- =========================
-INSERT INTO users (email, password_hash, full_name, role)
-SELECT 'owner@gic.local', '$2a$10$0bRzCzJm2qk7H7w8p8m9yOe2Vwq0mZt7YVxw9o1KxU8n6fPpQy8vS', 'Owner', 'owner'
-WHERE NOT EXISTS (SELECT 1 FROM users);
+INSERT INTO users (email, password_hash, full_name, role, can_invite)
+SELECT
+  'admin@garden.md',
+  '$2a$10$7EqJtq98hPqEX7fNZaFWoOhi5Jr.1gGm1hD4fZrZ8q7dQkYyV8p9K',
+  'Admin',
+  'owner',
+  1
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@garden.md');
+-- =========================================================
+-- ORG STRUCTURE (Departments / Positions / User Profile)
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS departments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  parent_id INTEGER,
+  manager_user_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+
+  FOREIGN KEY (parent_id) REFERENCES departments(id) ON DELETE SET NULL,
+  FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  department_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+
+  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_profile (
+  user_id INTEGER PRIMARY KEY,
+
+  first_name TEXT,
+  last_name TEXT,
+  phone TEXT,
+  photo_base64 TEXT,
+
+  department_id INTEGER,
+  position_id INTEGER,
+  manager_user_id INTEGER,
+
+  updated_at TEXT DEFAULT (datetime('now')),
+
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+  FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE SET NULL,
+  FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_profile_department ON user_profile(department_id);
+CREATE INDEX IF NOT EXISTS idx_user_profile_position ON user_profile(position_id);
+CREATE INDEX IF NOT EXISTS idx_user_profile_manager ON user_profile(manager_user_id);
