@@ -37,7 +37,7 @@
 
         <div class="row" style="margin-top:12px;">
           <button id="btnLogin" type="button" class="btn primary">Войти</button>
-          <button id="btnRegister" type="button" class="btn secondary">Регистрация</button>
+          <button id="btnRegister" type="button" class="btn secondary" style="display:none;">Регистрация</button>
         </div>
 
         <p id="loginMsg" class="msg"></p>
@@ -99,7 +99,6 @@
               <span class="nav__left"><span class="nav__icon">🧩</span><span class="nav__text">Доска</span></span>
             </button>
 
-            <!-- ✅ НОВОЕ: Структура -->
             <button class="nav__item" type="button" data-view="structure">
               <span class="nav__left"><span class="nav__icon">🏗️</span><span class="nav__text">Структура</span></span>
             </button>
@@ -128,7 +127,6 @@
               <span class="nav__left"><span class="nav__icon">✍️</span><span class="nav__text">Подпись</span></span>
             </button>
 
-            <!-- ✅ Приглашения (видно owner или can_invite=1; скрывается через app.js) -->
             <button class="nav__item" type="button" data-view="invites">
               <span class="nav__left"><span class="nav__icon">🧾</span><span class="nav__text">Приглашения</span></span>
             </button>
@@ -151,6 +149,73 @@
     </section>
   </div>
 
-  <script src="app.js"></script>
+  <!-- ✅ UI как Bitrix: дерево + правая панель -->
+  <template id="tpl-structure">
+    <div class="gi-structure">
+      <div class="gi-structure__top">
+        <div class="gi-structure__title">
+          <h2 style="margin:0;">Структура компании</h2>
+          <div class="muted" style="margin-top:2px;">Отделы • Руководители • Подчинённые</div>
+        </div>
+
+        <div class="gi-structure__actions">
+          <button id="btnStrAddRoot" class="btn primary" type="button">Добавить</button>
+          <input id="strSearch" type="search" placeholder="Найти отдел/сотрудника..." />
+        </div>
+      </div>
+
+      <div class="gi-structure__body">
+        <!-- CANVAS -->
+        <div class="gi-structure__canvas">
+          <div id="orgCanvas" class="org-canvas">
+            <div class="muted">Загрузка структуры...</div>
+          </div>
+        </div>
+
+        <!-- SIDE PANEL -->
+        <aside class="gi-structure__panel">
+          <div class="card" style="height:100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              <div>
+                <div class="muted" style="font-size:12px;">Отдел</div>
+                <div id="panelDeptName" style="font-weight:700; font-size:16px;">—</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button id="btnPanelAddChild" class="btn" type="button">+ Подотдел</button>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:600;">Сотрудники</div>
+                <div class="muted" id="panelEmpCount">0</div>
+              </div>
+
+              <div class="muted" style="margin-top:8px;">Руководители</div>
+              <div id="panelManagers" class="gi-list">—</div>
+
+              <div class="muted" style="margin-top:10px;">Подчинённые</div>
+              <div id="panelEmployees" class="gi-list">—</div>
+            </div>
+
+            <hr style="opacity:.15; margin:14px 0;">
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight:600;">Действия</div>
+            </div>
+
+            <div style="margin-top:10px; display:grid; gap:10px;">
+              <button id="btnPanelRename" class="btn" type="button">Переименовать отдел</button>
+              <button id="btnPanelDelete" class="btn" type="button">Удалить отдел</button>
+            </div>
+
+            <p id="panelMsg" class="muted" style="margin-top:12px;"></p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </template>
+
+  <script src="app.js?v=200" defer></script>
 </body>
 </html>

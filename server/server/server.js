@@ -9,23 +9,51 @@ const cookieParser = require("cookie-parser");
 const { db, run, all, dbPath } = require("./db");
 const { authRequired, login, me, logout } = require("./auth");
 
-// ✅ роутеры
+// routers
 const invitesRouter = require("./invite");
 const registerInviteRouter = require("./registerInvite");
-const usersRouter = require("./users"); // ✅ owner управляет can_invite
-const structureRouter = require("./structure"); // ✅ НОВОЕ: структура (отделы/должности/сотрудники)
+const usersRouter = require("./users");
+const structureRouter = require("./structure");
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
+app.use(usersRouter);
 
-// Корень проекта: gic-portal (там index.html/app.js/style.css/invite.html)
+// корень проекта: gic-portal (там index.html/app.js/style.css/invite.html)
 const PROJECT_ROOT = path.join(__dirname, "..", "..");
 
-// schema.sql лежит: gic-portal/server/sql/schema.sql
+// schema.sql: gic-portal/server/sql/schema.sql
 const schemaPath = path.join(__dirname, "..", "sql", "schema.sql");
 
-// ✅ Инициализация БД и схемы (с логами и проверками)
+function execSql(sql) {
+  return new Promise((resolve, reject) => {
+    db.exec(sql, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+function tableColumns(table) {
+  return new Promise((resolve, reject) => {
+    db.all(`PRAGMA table_info(${table});`, (err, rows) => {
+      if (err) return reject(err);
+      resolve((rows || []).map((r) => r.name));
+    });
+  });
+}
+
+async function migrateDb() {
+  // users.can_manage_structure (если база старая)
+  const cols = await tableColumns("users");
+  if (!cols.includes("can_manage_structure")) {
+    console.log("🛠️ MIGRATION: add users.can_manage_structure");
+    await execSql(`ALTER TABLE users ADD COLUMN can_manage_structure INTEGER NOT NULL DEFAULT 0;`);
+    console.log("✅ MIGRATION OK: users.can_manage_structure added");
+  }
+
+  // owner всегда: can_invite=1, can_manage_structure=1
+  await execSql(`UPDATE users SET can_invite=1, can_manage_structure=1 WHERE role='owner';`);
+}
+
 function initDb() {
   console.log("[DB] path:", dbPath);
 
@@ -38,10 +66,9 @@ function initDb() {
     process.exit(1);
   }
 
-  // ✅ foreign keys включаем ДО выполнения схемы
   db.exec("PRAGMA foreign_keys = ON;");
 
-  db.exec(schemaSql, (err) => {
+  db.exec(schemaSql, async (err) => {
     if (err) {
       console.error("❌ DB schema init error:", err.message);
       console.error("   schemaPath:", schemaPath);
@@ -49,8 +76,8 @@ function initDb() {
       return;
     }
 
-    // ✅ ПРОВЕРКА: структура invites должна быть с token_hash
-    db.all("PRAGMA table_info(invites);", (e2, cols) => {
+    // проверка invites (token_hash)
+    db.all("PRAGMA table_info(invites);", async (e2, cols) => {
       if (e2) {
         console.error("❌ Failed to read invites schema:", e2.message);
         process.exit(1);
@@ -58,16 +85,24 @@ function initDb() {
       }
 
       const names = (cols || []).map((c) => c.name);
-      const hasTokenHash = names.includes("token_hash");
-      const hasExpiresAt = names.includes("expires_at");
-      const hasUsedAt = names.includes("used_at");
+      const ok =
+        names.includes("token_hash") &&
+        names.includes("expires_at") &&
+        names.includes("used_at");
 
-      if (!hasTokenHash || !hasExpiresAt || !hasUsedAt) {
+      if (!ok) {
         console.error("❌ INVITES TABLE WRONG STRUCTURE!");
-        console.error("   Expected columns: token_hash, expires_at, used_at");
-        console.error("   Actual columns:", names);
-        console.error("👉 Fix: use ONLY ONE invites table in schema.sql (token_hash version).");
-        console.error("👉 Then delete server/data/app.db and restart.");
+        console.error("Expected: token_hash, expires_at, used_at");
+        console.error("Actual:", names);
+        console.error("👉 Fix schema.sql and delete server/data/app.db then restart");
+        process.exit(1);
+        return;
+      }
+
+      try {
+        await migrateDb();
+      } catch (e) {
+        console.error("❌ Migration failed:", e.message);
         process.exit(1);
         return;
       }
@@ -80,13 +115,13 @@ function initDb() {
 
 initDb();
 
-// ✅ подключаем роуты
+// routes
 app.use(invitesRouter);
 app.use(registerInviteRouter);
 app.use(usersRouter);
-app.use(structureRouter); // ✅ НОВОЕ
+app.use(structureRouter);
 
-// ✅ закрываем обычную регистрацию (только invite)
+// invite-only register закрыт
 app.post("/api/auth/register", (req, res) => {
   return res.status(403).json({
     error: "Registration is invite-only. Use /invite link.",
@@ -102,10 +137,10 @@ app.post("/api/auth/login", (req, res) =>
 );
 
 app.get("/api/auth/me", authRequired, (req, res) => me(req, res));
-app.get("/api/me", authRequired, (req, res) => me(req, res)); // ✅ алиас (удобно фронту)
+app.get("/api/me", authRequired, (req, res) => me(req, res));
 app.post("/api/auth/logout", (req, res) => logout(req, res));
 
-// --- service-log ---
+// service-log
 app.post("/api/service-log", authRequired, async (req, res) => {
   try {
     const { object_name, task_type, notes, photo_base64, project_id } = req.body || {};
@@ -141,15 +176,13 @@ app.get("/api/service-log", authRequired, async (req, res) => {
   }
 });
 
-// ✅ Статика из корня проекта
+// static
 app.use(express.static(PROJECT_ROOT));
 
-// ✅ Страница приглашения (invite.html должен быть в корне gic-portal)
 app.get("/invite/:token", (req, res) => {
   res.sendFile(path.join(PROJECT_ROOT, "invite.html"));
 });
 
-// Главная
 app.get("/", (req, res) => {
   res.sendFile(path.join(PROJECT_ROOT, "index.html"));
 });

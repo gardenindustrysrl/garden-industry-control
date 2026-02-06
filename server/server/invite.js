@@ -10,18 +10,29 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-function ownerRequired(req, res, next) {
+/**
+ * Кто может создавать инвайты:
+ * - owner (ты)
+ * - admin (пользователь, которому ты дашь право приглашать)
+ *
+ * ВАЖНО: это не меняет роли приглашённого (worker/manager)
+ */
+function canInviteRequired(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Not authenticated" });
-  if (req.user.role !== "owner") return res.status(403).json({ error: "Forbidden" });
+
+  const r = String(req.user.role || "").toLowerCase();
+  if (!["owner", "admin"].includes(r)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
   next();
 }
 
-// разрешённые роли для invite
+// разрешённые роли для invite (роль будущего пользователя)
 const ALLOWED_ROLES = new Set(["worker", "manager"]);
 
 /**
  * ✅ GET /api/invites/:token
- * Проверка токена для invite.html
+ * Проверка токена для invite.html?token=...
  */
 router.get("/api/invites/:token", async (req, res) => {
   try {
@@ -66,12 +77,12 @@ router.get("/api/invites/:token", async (req, res) => {
 });
 
 /**
- * ✅ POST /api/invites (только owner)
+ * ✅ POST /api/invites (owner/admin)
  * body: { email?: string|null, role?: "worker"|"manager", ttl_hours?: number }
  *
- * ВАЖНО: это соответствует твоему app.js (он шлёт ttl_hours и ждёт inviteLink)
+ * ВАЖНО: соответствует твоему app.js (ttl_hours и inviteLink)
  */
-router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
+router.post("/api/invites", authRequired, canInviteRequired, async (req, res) => {
   try {
     const emailRaw = req.body?.email ? String(req.body.email).trim() : "";
     const email = emailRaw ? emailRaw : null;
@@ -82,6 +93,7 @@ router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
     const ttl_hours = Number(req.body?.ttl_hours ?? 72);
     const ttl = Number.isFinite(ttl_hours) && ttl_hours > 0 ? ttl_hours : 72;
 
+    // UUID удобен, но оставим совместимо: randomUUID есть в Node 16+
     const token = crypto.randomUUID();
     const token_hash = hashToken(token);
 
@@ -98,10 +110,9 @@ router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
 
     res.json({
       ok: true,
-      // показываем один раз
-      token,
-      // то, что ждёт твой фронт:
-      inviteLink: `/invite/${token}`,
+      token, // показываем один раз
+      // правильная ссылка под invite.html, чтобы оно само дергало /api/invites/:token
+      inviteLink: `/invite.html?token=${token}`,
       role,
       expires_at,
     });
@@ -112,9 +123,9 @@ router.post("/api/invites", authRequired, ownerRequired, async (req, res) => {
 });
 
 /**
- * ✅ GET /api/invites-list (только owner)
+ * ✅ GET /api/invites-list (owner/admin)
  */
-router.get("/api/invites-list", authRequired, ownerRequired, async (req, res) => {
+router.get("/api/invites-list", authRequired, canInviteRequired, async (req, res) => {
   try {
     const rows = await all(
       db,
@@ -129,8 +140,5 @@ router.get("/api/invites-list", authRequired, ownerRequired, async (req, res) =>
     res.status(500).json({ ok: false, error: "Failed" });
   }
 });
-
-// ❌ DEV ROUTE УДАЛЁН полностью:
-// router.get("/api/dev/create-invite", ...)
 
 module.exports = router;

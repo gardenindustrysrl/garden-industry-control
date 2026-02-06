@@ -12,7 +12,23 @@
     return;
   }
 
-  const token = location.pathname.split("/").pop();
+  const url = new URL(window.location.href);
+
+// 1) Если ссылка вида /invite/<token>
+let token = "";
+const m = url.pathname.match(/\/invite\/([^\/?#]+)/);
+if (m) token = decodeURIComponent(m[1]);
+
+// 2) Если ссылка вида /invite.html?token=<token>
+if (!token) token = url.searchParams.get("token") || "";
+
+token = token.trim();
+
+if (!token) {
+  status.textContent = "Ошибка: token отсутствует в ссылке";
+  return;
+}
+
   if (tokenInput) tokenInput.value = token;
 
   status.textContent = "Проверяем приглашение...";

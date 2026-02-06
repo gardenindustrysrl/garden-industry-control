@@ -6,7 +6,7 @@ function signToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
 
-// ✅ Всегда поднимаем актуального пользователя из БД (role, full_name, can_invite)
+// ✅ Всегда поднимаем актуального пользователя из БД (role, full_name, can_invite, can_manage_structure)
 async function authRequired(req, res, next) {
   const token =
     req.cookies?.token ||
@@ -16,13 +16,11 @@ async function authRequired(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // decoded содержит минимум {id}
     if (!decoded?.id) return res.status(401).json({ error: "Invalid token" });
 
     const user = await get(
       db,
-      `SELECT id, email, full_name, role, can_invite
+      `SELECT id, email, full_name, role, can_invite, can_manage_structure
        FROM users
        WHERE id = ?`,
       [decoded.id]
@@ -30,13 +28,18 @@ async function authRequired(req, res, next) {
 
     if (!user) return res.status(401).json({ error: "User not found" });
 
-    // ✅ can_invite: для owner всегда true
     const normalized = {
       id: user.id,
       email: user.email,
       full_name: user.full_name,
       role: user.role,
+
+      // owner всегда может приглашать
       can_invite: user.role === "owner" ? 1 : (user.can_invite ? 1 : 0),
+
+      // owner всегда управляет структурой
+      can_manage_structure:
+        user.role === "owner" ? 1 : (user.can_manage_structure ? 1 : 0),
     };
 
     req.user = normalized;
@@ -46,7 +49,7 @@ async function authRequired(req, res, next) {
   }
 }
 
-// (Обычная регистрация у тебя закрыта на сервере — но оставим функцию рабочей)
+// (обычная регистрация у тебя закрыта на сервере — оставляем функцию рабочей)
 async function register(req, res) {
   const { email, password, full_name } = req.body || {};
   if (!email || !password)
@@ -58,11 +61,10 @@ async function register(req, res) {
   const password_hash = await bcrypt.hash(password, 10);
   const r = await run(
     db,
-    "INSERT INTO users (email, password_hash, full_name, role, can_invite) VALUES (?, ?, ?, 'owner', 1)",
+    "INSERT INTO users (email, password_hash, full_name, role, can_invite, can_manage_structure) VALUES (?, ?, ?, 'owner', 1, 1)",
     [email, password_hash, full_name || null]
   );
 
-  // ✅ В токене храним минимум (id). Остальное берём из БД.
   const token = signToken({ id: r.lastID });
   res.cookie("token", token, { httpOnly: true, sameSite: "lax" });
 
@@ -80,7 +82,6 @@ async function login(req, res) {
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: "Wrong email or password" });
 
-  // ✅ В токене храним минимум (id). Остальное берём из БД.
   const token = signToken({ id: user.id });
   res.cookie("token", token, { httpOnly: true, sameSite: "lax" });
 
