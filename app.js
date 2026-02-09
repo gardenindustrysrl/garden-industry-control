@@ -447,70 +447,370 @@ async function renderInvitesView(root) {
 
 /* ================= STRUCTURE VIEW (Tree like Bitrix) ================= */
 function injectStructureCssOnce() {
-  if (document.getElementById("structureCss")) return;
-
   const css = `
-  /* ==== Org chart (simple Bitrix-like tree) ==== */
-  .gi-structure-wrap { display:flex; gap:14px; align-items:flex-start; }
-  .gi-structure-canvas { flex:1; min-height:520px; padding:14px; border-radius:14px; background: rgba(255,255,255,0.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); overflow:auto; }
-  .gi-structure-side { width:320px; min-width:280px; }
-  .gi-org { display:flex; justify-content:center; }
-  .gi-org ul { padding-top:20px; position:relative; transition: all .2s; display:flex; justify-content:center; }
-  .gi-org li { list-style-type:none; position:relative; padding:20px 10px 0 10px; text-align:center; }
-  .gi-org li::before, .gi-org li::after { content:''; position:absolute; top:0; right:50%; border-top:1px solid rgba(255,255,255,0.16); width:50%; height:20px; }
-  .gi-org li::after { right:auto; left:50%; border-left:1px solid rgba(255,255,255,0.16); }
-  .gi-org li:only-child::after, .gi-org li:only-child::before { display:none; }
-  .gi-org li:only-child { padding-top:0; }
-  .gi-org li:first-child::before, .gi-org li:last-child::after { border:0 none; }
-  .gi-org li:last-child::before { border-right:1px solid rgba(255,255,255,0.16); border-radius:0 6px 0 0; }
-  .gi-org li:first-child::after { border-radius:6px 0 0 0; }
-  .gi-org ul ul::before { content:''; position:absolute; top:0; left:50%; border-left:1px solid rgba(255,255,255,0.16); width:0; height:20px; }
-
-  .gi-node {
-    display:inline-block;
-    min-width:220px;
-    max-width:260px;
-    padding:12px 12px 10px;
-    border-radius:12px;
-    background: rgba(17,20,26,0.72);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-    border: 1px solid rgba(255,255,255,0.08);
-    cursor:pointer;
-    text-align:left;
-  }
-  .gi-node__title { font-weight:700; }
-  .gi-node__meta { margin-top:6px; font-size:12px; opacity:.75; }
-  .gi-node__tools { margin-top:10px; display:flex; gap:8px; }
-  .gi-plus {
-    width:30px; height:30px; border-radius:10px;
-    border:1px solid rgba(255,255,255,0.14);
-    background: rgba(255,255,255,0.06);
-    display:inline-flex; align-items:center; justify-content:center;
-    cursor:pointer;
-  }
-  .gi-plus:hover { background: rgba(255,255,255,0.10); }
-  .gi-modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:9999;}
-  .gi-modal{width:min(860px, 92vw); border-radius:16px; background:#0f141a; border:1px solid rgba(255,255,255,.10); box-shadow:0 30px 80px rgba(0,0,0,.45); overflow:hidden;}
-  .gi-modal__head{padding:14px 16px; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.08);}
-  .gi-modal__tabs{padding:10px 16px; display:flex; gap:10px; border-bottom:1px solid rgba(255,255,255,.08);}
-  .gi-tab{padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); cursor:pointer; font-size:13px;}
-  .gi-tab.active{background:rgba(72, 142, 255, .20); border-color:rgba(72,142,255,.35);}
-  .gi-modal__body{padding:14px 16px;}
-  .gi-modal__foot{padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,.08);}
-  `;
-
-  const style = document.createElement("style");
-  style.id = "structureCss";
-  style.textContent = css;
-  document.head.appendChild(style);
+  /* ===== FULL WIDTH STRUCTURE (no right panel) ===== */
+.gi-structure-full{
+  width:100%;
+  min-height: calc(100vh - 120px);
 }
+
+.gi-structure-canvas--full{
+  width:100%;
+  height: calc(100vh - 120px);
+  overflow: hidden; /* важно: теперь камера управляет обзором, а не скролл */
+}
+
+/* =========================
+   STRUCTURE — STABLE FIX
+   (tree like Bitrix + modal)
+   ========================= */
+
+.gi-structure-wrap{
+  display:flex;
+  gap:16px;
+  width:100%;
+  min-height: calc(100vh - 120px);
+  align-items:stretch;
+}
+
+.gi-structure-canvas{
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding:20px;
+  border-radius:16px;
+  background: rgba(255,255,255,0.04);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+  overflow:auto;
+  scrollbar-color: rgba(255,255,255,.25) transparent;
+  scrollbar-width: thin;
+}
+
+.gi-structure-side{
+  flex: 0 0 360px;
+  width:360px;
+  min-width:360px;
+  min-height: 0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+/* ============ ORG TREE (flex, no overlap) ============ */
+
+.gi-org{
+  display:flex;
+  justify-content:flex-start;
+  width:100%;
+  padding: 10px 30px 30px 30px;
+}
+
+/* корневой ul растёт по контенту — появится горизонтальный скролл */
+.gi-org > ul{
+  width: max-content;
+  max-width: none;
+}
+
+/* ВАЖНО:
+   UL = flex-row, без wrap, чтобы элементы не “падали” в столбик
+*/
+.gi-org ul{
+  margin:0;
+  padding: 46px 0 0 0;            /* было 26px — увеличили вертикальный шаг уровня */
+  position:relative;
+
+  display:flex;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  justify-content:center;
+  align-items:flex-start;
+
+  white-space:nowrap;
+}
+
+/* LI не сжимается — поэтому нет налезания */
+.gi-org li{
+  list-style:none;
+  position:relative;
+  flex: 0 0 auto;
+
+  padding: 78px 48px 0 48px;      /* было 58px 28px — больше расстояние между соседями и уровнями */
+  text-align:center;
+}
+
+/* линии */
+.gi-org li::before,
+.gi-org li::after{
+  content:'';
+  position:absolute;
+  top:0;
+  right:50%;
+  width:50%;
+  height:30px;
+  border-top:1px solid rgba(255,255,255,0.16);
+}
+
+.gi-org li::after{
+  right:auto;
+  left:50%;
+  border-left:1px solid rgba(255,255,255,0.16);
+}
+
+.gi-org li:only-child::before,
+.gi-org li:only-child::after{ display:none; }
+
+.gi-org li:only-child{ padding-top:0; }
+
+.gi-org li:first-child::before{ border:0 none; }
+.gi-org li:last-child::after{ border:0 none; }
+
+.gi-org li:last-child::before{
+  border-right:1px solid rgba(255,255,255,0.16);
+  border-radius:0 6px 0 0;
+}
+
+.gi-org li:first-child::after{
+  border-radius:6px 0 0 0;
+}
+
+.gi-org ul ul::before{
+  content:'';
+  position:absolute;
+  top:0;
+  left:50%;
+  width:0;
+  height:30px;
+  border-left:1px solid rgba(255,255,255,0.16);
+}
+
+/* ============ NODE ============ */
+
+.gi-node{
+  display:inline-block;
+  width:300px;                    /* было 260px — чтобы карточки были одинаковые и не “съезжали” */
+  max-width:300px;
+
+  padding:12px;
+  border-radius:14px;
+  background: rgba(17,20,26,0.78);
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+
+  text-align:left;
+  cursor:pointer;
+}
+
+.gi-node__title{ font-weight:700; }
+.gi-node__meta{
+  margin-top:6px;
+  font-size:12px;
+  opacity:.75;
+}
+
+.gi-node__tools{
+  margin-top:10px;
+  display:flex;
+  gap:8px;
+  position:relative; /* для выпадающего меню */
+}
+
+/* кнопки */
+.gi-plus,
+.gi-more{
+  width:30px;
+  height:30px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.06);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.gi-plus:hover,
+.gi-more:hover{ background:rgba(255,255,255,0.12); }
+
+/* меню ⋯ */
+.gi-menu{
+  position:absolute;
+  top:38px;
+  right:0;
+  min-width:260px;
+  background:rgba(15,20,26,.98);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;
+  padding:8px;
+  z-index:2000;
+}
+.gi-menu__item{
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  background:transparent;
+  border:0;
+  color:#fff;
+  text-align:left;
+  cursor:pointer;
+  font-size:13px;
+}
+.gi-menu__item:hover{ background:rgba(255,255,255,.08); }
+.gi-menu__item.danger{ color:#ff6b6b; }
+.gi-menu__sep{
+  height:1px;
+  background:rgba(255,255,255,.1);
+  margin:6px 0;
+}
+
+/* ============ MODAL (ВОЗВРАЩАЕМ КАК БЫЛО) ============ */
+.gi-modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+  padding: 24px;
+}
+
+.gi-modal{
+  width:min(860px, 92vw);
+  max-height: calc(100vh - 80px);
+  overflow:auto;
+  border-radius:16px;
+  background:#0f141a;
+  border:1px solid rgba(255,255,255,.10);
+  box-shadow:0 30px 80px rgba(0,0,0,.45);
+}
+
+.gi-modal__head{
+  padding:14px 16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:rgba(255,255,255,.03);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.gi-modal__tabs{
+  padding:10px 16px;
+  display:flex;
+  gap:10px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+
+.gi-tab{
+  padding:8px 12px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.04);
+  cursor:pointer;
+  font-size:13px;
+}
+.gi-tab.active{
+  background:rgba(72, 142, 255, .20);
+  border-color:rgba(72,142,255,.35);
+}
+
+.gi-modal__body{ padding:14px 16px; }
+.gi-modal__foot{
+  padding:14px 16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+
+/* адаптив */
+@media (max-width: 1100px){
+  .gi-structure-wrap{ flex-direction:column; }
+  .gi-structure-side{
+    width:100%;
+    min-width:0;
+    flex: 1 1 auto;
+  }
+  .gi-org{ padding-left: 16px; padding-right: 16px; }
+}
+  .gi-expander{
+  width:28px;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  line-height:1;
+}
+  /* + на линии между родителем и детьми */
+.gi-join{
+  position: relative;
+  height: 34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top: 10px;
+}
+
+.gi-join::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:50%;
+  transform: translateX(-50%);
+  width:1px;
+  height: 34px;
+  background: rgba(255,255,255,0.10);
+}
+
+/* кнопка + как в Bitrix (на линии) */
+.gi-addline{
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(18,20,26,0.85);
+  box-shadow: 0 8px 22px rgba(0,0,0,.25);
+  color:#fff;
+  cursor:pointer;
+}
+
+/* подсветка выбранной карточки */
+li.is-selected > .gi-node{
+  outline: 2px solid rgba(80,140,255,0.65);
+  box-shadow: 0 0 0 6px rgba(80,140,255,0.12);
+}
+
+/* подсветка линии/ребер на пути (делаем “синим”) */
+li.path-on > ul::before,
+li.path-on > ul li::before,
+li.path-on > ul li::after{
+  border-color: rgba(80,140,255,0.75) !important;
+}
+li.path-on > .gi-join::before{
+  background: rgba(80,140,255,0.75) !important;
+}
+
+
+`;
+
+  let style = document.getElementById("gi-structure-css");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "gi-structure-css";
+    document.head.appendChild(style);
+  }
+  style.textContent = css;
+}
+
 
 async function renderStructureView(root) {
   injectStructureCssOnce();
 
-  root.innerHTML = `
-    <div class="gi-structure-wrap">
-      <div class="gi-structure-canvas">
+    root.innerHTML = `
+    <div class="gi-structure-full">
+      <div class="gi-structure-canvas gi-structure-canvas--full">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px;">
           <div>
             <h2 style="margin:0;">Структура компании</h2>
@@ -526,30 +826,124 @@ async function renderStructureView(root) {
           <p class="muted">Загрузка...</p>
         </div>
       </div>
-
-      <div class="gi-structure-side">
-        <div class="card">
-          <h3 style="margin-top:0;">Права</h3>
-          <p class="muted" style="margin:0;">
-            <b>Owner</b> — полный доступ.<br/>
-            <b>can_manage_structure</b> — доступ как у директора.<br/>
-            <b>Руководитель отдела</b> — может создавать под-отделы в своём отделе.
-          </p>
-        </div>
-
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin-top:0;">Выбранный отдел</h3>
-          <div id="depInfo" class="muted">Нажми на отдел в дереве.</div>
-        </div>
-      </div>
     </div>
   `;
 
+
+
   const orgRoot = $("orgRoot");
   const depInfo = $("depInfo");
+  // ✅ Правая панель структуры (как в Bitrix)
+const panelDeptName = $("panelDeptName");
+const panelParent = $("panelParent");
+const panelChildCount = $("panelChildCount");
+const panelEmployees = $("panelEmployees");
+const panelMsg = $("panelMsg");
+
+function updateStructurePanelById(depId) {
+  const dep = departments.find((d) => d.id === Number(depId));
+  if (!dep) return;
+
+  if (panelDeptName) panelDeptName.textContent = dep.name || "";
+  if (panelParent) {
+    const parent = dep.parent_id ? departments.find((d) => d.id === dep.parent_id) : null;
+    panelParent.textContent = parent ? `Родитель: ${parent.name}` : "Родитель: —";
+  }
+  if (panelChildCount) {
+    const count = departments.filter((d) => d.parent_id === dep.id).length;
+    panelChildCount.textContent = String(count);
+  }
+  if (panelEmployees) {
+    panelEmployees.textContent = dep.manager_name ? `Руководитель: ${dep.manager_name}` : "Руководитель: —";
+  }
+  if (panelMsg) panelMsg.textContent = "";
+}
+
+   // ====== PAN + ZOOM like Bitrix ======
+  let cam = {
+    x: 0,
+    y: 0,
+    scale: 1
+  };
+
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+  let camStart = { x: 0, y: 0 };
+
+  const canvasEl = root.querySelector(".gi-structure-canvas");
+
+function applyTransform() {
+  orgRoot.style.transformOrigin = "0 0";   // ✅ важное
+  orgRoot.style.transform =
+    `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`;
+}
+
+
+  applyTransform();
+
+  // --- PAN (drag мышью) ---
+  canvasEl.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;                 // только ЛКМ
+    if (e.target.closest(".gi-node")) return;  // не тянем при клике по карточке
+
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+    camStart = { x: cam.x, y: cam.y };
+    canvasEl.style.cursor = "grabbing";
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isPanning) return;
+    cam.x = camStart.x + (e.clientX - panStart.x);
+    cam.y = camStart.y + (e.clientY - panStart.y);
+    applyTransform();
+  });
+
+  window.addEventListener("mouseup", () => {
+    isPanning = false;
+    canvasEl.style.cursor = "default";
+  });
+
+  // --- ZOOM (колёсико мыши, как в Bitrix) ---
+  canvasEl.addEventListener("wheel", (e) => {
+    e.preventDefault();
+
+    const rect = canvasEl.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const oldScale = cam.scale;
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    cam.scale = Math.max(0.35, Math.min(2.2, cam.scale + delta));
+
+    // zoom в точку курсора
+    cam.x = mx - (mx - cam.x) * (cam.scale / oldScale);
+    cam.y = my - (my - cam.y) * (cam.scale / oldScale);
+
+    applyTransform();
+  }, { passive: false });
 
   let departments = [];
+  let selectedDepId = null;
+let pathIds = new Set();
+
+function computePathSet(id) {
+  const parentById = new Map(departments.map(d => [d.id, d.parent_id]));
+  const set = new Set();
+  let cur = id;
+  while (cur != null) {
+    set.add(cur);
+    cur = parentById.get(cur);
+  }
+  return set;
+}
+
   let employees = [];
+  let expanded = new Set();   // какие отделы раскрыты
+let lastTree = [];          // последний tree, чтобы перерисовывать
+let selectedId = null;
+
+
 
   $("btnStructRefresh").onclick = async () => {
     await loadAndRender();
@@ -563,7 +957,7 @@ async function renderStructureView(root) {
 
   async function loadAndRender() {
     orgRoot.innerHTML = `<p class="muted">Загрузка...</p>`;
-    depInfo.innerHTML = `Нажми на отдел в дереве.`;
+    if (depInfo) depInfo.innerHTML = `Нажми на отдел в дереве.`;
 
     const depData = await api("/api/structure/departments");
     departments = depData.departments || [];
@@ -572,6 +966,9 @@ async function renderStructureView(root) {
     employees = empData.employees || [];
 
     const tree = buildTree(departments);
+expanded = new Set(departments.map(d => d.id)); // ✅ раскрыть всё дерево
+selectedId = tree[0]?.id || null;              // корень (если есть)
+
 
     // если нет корня — предложим создать
     if (!tree.length) {
@@ -611,35 +1008,159 @@ async function renderStructureView(root) {
     return roots;
   }
 
-  function renderTreeHtml(nodes) {
-    const toLi = (n) => {
-      const manager = (n.manager_name || n.manager_email || "").trim();
-      const canAddChild =
-        canManageStructure() || (CURRENT_USER?.id && n.manager_user_id === CURRENT_USER.id);
+function renderTreeHtml(tree) {
+  lastTree = tree;
 
-      return `
-        <li data-dep-id="${n.id}">
-          <div class="gi-node">
-            <div class="gi-node__title">${escapeHtml(n.name)}</div>
-            <div class="gi-node__meta">
-              ${manager ? `Руководитель: <b>${escapeHtml(manager)}</b><br/>` : ""}
-              Подотделов: ${n.children.length}
-            </div>
-            <div class="gi-node__tools">
-              <button class="gi-plus" title="Добавить под-отдел" data-action="add-child" ${
-                canAddChild ? "" : "disabled"
-              }>+</button>
-            </div>
-          </div>
-          ${n.children.length ? `<ul>${n.children.map(toLi).join("")}</ul>` : ""}
-        </li>
-      `;
-    };
+  const byId = new Map(departments.map(d => [d.id, d]));
+  const parentOf = (id) => {
+    const d = byId.get(id);
+    return d ? d.parent_id : null;
+  };
 
-    return `<ul>${nodes.map(toLi).join("")}</ul>`;
+  // набор id на пути от выбранного до корня
+  const pathSet = new Set();
+  if (selectedId != null) {
+    let cur = selectedId;
+    while (cur != null) {
+      pathSet.add(cur);
+      cur = parentOf(cur);
+    }
   }
 
+  function renderNode(dep) {
+    const hasKids = dep.children && dep.children.length > 0;
+    const isOpen = hasKids && expanded.has(dep.id);
+    const canAddChild = canManageStructure();
+
+    const isSelected = selectedId === dep.id;
+    const onPath = pathSet.has(dep.id); // узел на пути
+
+    return `
+      <li data-dep-id="${dep.id}" class="${onPath ? "path-on" : ""} ${isSelected ? "is-selected" : ""}">
+        <div class="gi-node ${selectedDepId === dep.id ? "is-selected" : ""}" data-action="select">
+          <div class="gi-node__head" style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+            <div style="min-width:0;">
+              <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(dep.name)}
+              </div>
+              <div class="muted" style="font-size:12px; margin-top:4px;">
+                Подчинённых: ${hasKids ? dep.children.length : 0}
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center;">
+             
+              <button class="gi-more iconbtn" title="Действия" data-action="more">⋯</button>
+            </div>
+          </div>
+
+          <div class="gi-menu" hidden>
+            <button class="gi-menu__item" data-menu="edit">Редактировать отдел</button>
+            <button class="gi-menu__item" data-menu="add-child" ${canAddChild ? "" : "disabled"}>Добавить отдел в подчинение</button>
+          </div>
+        </div>
+
+        ${hasKids ? `
+          <div class="gi-join">
+            <button class="gi-addline" data-action="add-child" title="Добавить под-отдел" ${canAddChild ? "" : "disabled"}>+</button>
+          </div>
+        ` : ``}
+
+        ${hasKids ? `<ul>${dep.children.map(renderNode).join("")}</ul>` : ``}
+      </li>
+    `;
+  }
+
+  return `<ul>${tree.map(renderNode).join("")}</ul>`;
+}
+
+
   function wireTreeEvents() {
+      // раскрыть/свернуть ветку
+  orgRoot.querySelectorAll('button[data-action="toggle"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const li = e.target.closest("li[data-dep-id]");
+      if (!li) return;
+      const id = Number(li.dataset.depId);
+           orgRoot.innerHTML = renderTreeHtml(lastTree);
+      wireTreeEvents();
+    };
+  });
+    // выбор отдела (подсветка пути)
+  orgRoot.querySelectorAll(".gi-node[data-action='select']").forEach((node) => {
+   node.onclick = (e) => {
+  // клики по кнопкам внутри карточки не считаем выбором
+  if (e.target.closest("button")) return;
+
+  const li = node.closest("li[data-dep-id]");
+  if (!li) return;
+
+  const id = Number(li.dataset.depId);
+
+  selectedDepId = id;                 // ✅ новый id
+  pathIds = computePathSet(id);       // ✅ считаем путь
+
+  orgRoot.innerHTML = renderTreeHtml(lastTree);
+  wireTreeEvents();
+updateStructurePanelById(selectedDepId);
+};
+  });
+  
+  // меню ⋯ открыть/закрыть
+  orgRoot.querySelectorAll('button[data-action="more"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const node = btn.closest(".gi-node");
+      const menu = node?.querySelector(".gi-menu");
+      if (!menu) return;
+
+      // закрыть остальные
+      orgRoot.querySelectorAll(".gi-menu").forEach((m) => {
+        if (m !== menu) m.hidden = true;
+      });
+
+      menu.hidden = !menu.hidden;
+    };
+  });
+
+  // пункты меню
+  orgRoot.querySelectorAll(".gi-menu__item").forEach((item) => {
+    item.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const li = e.target.closest("li[data-dep-id]");
+      if (!li) return;
+      const id = Number(li.dataset.depId);
+      const dep = departments.find((d) => d.id === id);
+      if (!dep) return;
+
+      const action = item.dataset.menu;
+
+      if (action === "add-child") {
+        await openCreateDepartmentModal({ parent_id: dep.id, parent_name: dep.name });
+        await loadAndRender();
+        return;
+      }
+
+      if (action === "edit") {
+        // пока просто покажем сообщение (чтобы не ломать)
+        alert("Редактирование сделаем следующим шагом (форма + сохранение).");
+        return;
+      }
+    };
+  });
+
+  // закрывать меню кликом в пустоту
+  document.addEventListener("click", () => {
+    orgRoot.querySelectorAll(".gi-menu").forEach((m) => (m.hidden = true));
+  }, { once: true });
+
+    ;
+
     orgRoot.querySelectorAll("li[data-dep-id] .gi-node").forEach((nodeEl) => {
       nodeEl.addEventListener("click", (e) => {
         const li = e.target.closest("li[data-dep-id]");
@@ -649,16 +1170,18 @@ async function renderStructureView(root) {
         if (!dep) return;
 
         const manager = (dep.manager_name || dep.manager_email || "").trim();
+        if (depInfo) {
         depInfo.innerHTML = `
-          <div><b>${escapeHtml(dep.name)}</b></div>
-          <div class="muted" style="margin-top:6px;">
-            ${dep.description ? escapeHtml(dep.description) + "<br/>" : ""}
-            ${manager ? "Руководитель: " + escapeHtml(manager) + "<br/>" : ""}
-            ID: ${dep.id} | parent_id: ${dep.parent_id ?? "—"}
-          </div>
-        `;
+    <div><b>${escapeHtml(dep.name)}</b></div>
+    <div class="muted" style="margin-top:6px;">
+      ${dep.description ? escapeHtml(dep.description) + "<br/>" : ""}
+      ${manager ? "Руководитель: " + escapeHtml(manager) + "<br/>" : ""}
+      ID: ${dep.id} | parent_id: ${dep.parent_id ?? "—"}
+    </div>
+  `;}
       });
     });
+  
 
     orgRoot.querySelectorAll('button[data-action="add-child"]').forEach((btn) => {
       btn.addEventListener("click", async (e) => {
@@ -790,8 +1313,19 @@ async function renderStructureView(root) {
         status.textContent = "✅ Создано";
         setTimeout(close, 250);
       } catch (e) {
-        status.textContent = "❌ " + e.message;
-      }
+  const map = {
+    forbidden: "У вас нет прав доступа.",
+    forbidden_parent_required: "У вас нет прав создавать корневой отдел.",
+    forbidden_change_parent: "Нельзя менять вышестоящий отдел (parent).",
+    unauthorized: "Сессия истекла. Войдите заново.",
+    name_required: "Введите название отдела.",
+    bad_id: "Неверный ID.",
+    not_found: "Отдел не найден.",
+  };
+
+  status.textContent = "❌ " + (map[e.message] || "Ошибка: " + e.message);
+}
+
     };
 
     // click outside closes

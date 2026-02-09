@@ -373,3 +373,118 @@ body.sidebar-collapsed .nav__item{ padding: 12px 10px; }
 .table th { text-align: left; opacity: 0.8; }
 .btn { cursor: pointer; }
 .btn.primary { font-weight: 600; }
+/* ====== LAYOUT: app должен занимать всю ширину экрана ====== */
+body .container{
+  max-width: none !important;
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+#appCard.app{
+  width: 100% !important;
+}
+
+/* shell на всю ширину */
+.shell{
+  width: 100%;
+}
+
+/* sidebar прижать к левому краю */
+.sidebar{
+  margin-left: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+/* main прижать и дать нормальные отступы */
+.main{
+  width: 100%;
+}
+.page{
+  padding: 16px 18px; /* можно 12-20 под вкус */
+}
+/* ===== Structure view: FULL SCREEN ===== */
+.page:has(.gi-structure-full){
+  max-width: none !important;
+  width: 100% !important;
+  padding: 0 !important;           /* убираем внутренние отступы страницы */
+}
+
+.page:has(.gi-structure-full) .main{
+  padding: 0 !important;           /* убираем отступы main, чтобы было “во весь экран” */
+}
+
+.page:has(.gi-structure-full) #viewRoot{
+  width: 100% !important;
+}
+
+/* сам блок структуры — во всю ширину/высоту */
+.page:has(.gi-structure-full) .gi-structure-full{
+  width: 100% !important;
+  min-height: calc(100vh - var(--topbar-h)) !important;
+}
+
+.page:has(.gi-structure-full) .gi-structure-canvas--full{
+  width: 100% !important;
+  height: calc(100vh - var(--topbar-h)) !important;
+  border-radius: 0 !important;     /* чтобы не было “карточки” по центру */
+}
+/* ===== FULLSCREEN for Structure view only ===== */
+#viewRoot:has(.gi-structure-full){
+  width: 100%;
+  max-width: none;
+}
+
+/* снимаем ограничение ширины .page только когда открыта структура */
+.page:has(#viewRoot .gi-structure-full){
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* убираем отступы, чтобы canvas занял всё место */
+.page:has(#viewRoot .gi-structure-full),
+.page:has(#viewRoot .gi-structure-full) .main{
+  padding: 0 !important;
+}
+
+/* сам canvas по высоте */
+.page:has(#viewRoot .gi-structure-full) .gi-structure-canvas--full{
+  height: calc(100vh - var(--topbar-h)) !important;
+  border-radius: 0 !important;
+}
+/* ===== Path highlight (Bitrix-like) ===== */
+
+/* вертикальная линия от родителя к детям */
+.gi-org li.path-on > ul::before{
+  border-color: #3b82f6 !important;
+  opacity: 1;
+}
+
+/* линии к узлам на пути */
+.gi-org li.path-on::before,
+.gi-org li.path-on::after{
+  border-color: #3b82f6 !important;
+  opacity: 1;
+}
+
+/* карточки на пути */
+.gi-org li.path-on > .gi-node{
+  border-color: rgba(59,130,246,0.45);
+}
+
+/* выбранный отдел — сильнее */
+.gi-org li.is-selected > .gi-node{
+  border-color: #3b82f6;
+  box-shadow:
+    0 0 0 2px rgba(59,130,246,0.35),
+    0 10px 30px rgba(0,0,0,.25);
+}
+.gi-node {
+  cursor: pointer;
+}
+
+.gi-node.is-selected {
+  outline: 2px solid #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+}

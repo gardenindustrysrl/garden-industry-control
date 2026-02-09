@@ -70,10 +70,12 @@ router.post("/api/structure/departments", authRequired, requireStructureWrite, a
     // иначе: можно только если parent_id существует и пользователь manager этого parent_id
     if (!canManageStructure(u)) {
       if (!parent_id) {
-        return res.status(403).json({ error: "forbidden_parent_required" });
+        return res.status(403).json({ error: "forbidden_parent_required",
+    message: "У вас нет прав создавать корневой отдел" });
       }
       const ok = await isManagerOfDepartment(u.id, Number(parent_id));
-      if (!ok) return res.status(403).json({ error: "forbidden" });
+      if (!ok) return res.status(403).json({ error: "forbidden",
+    message: "У вас нет прав доступа", });
     }
 
     const r = await run(
